@@ -1,0 +1,51 @@
+#!/usr/bin/env node
+// schema-check schema.json data.(json|yaml)...
+// Validates each data file against a JSON Schema (draft 2020-12) with Ajv.
+// Files ending in .yaml/.yml are parsed as YAML 1.2 first.
+import Ajv2020 from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
+import YAML from "yaml";
+import { readInput, formatYamlError } from "./_common.mjs";
+
+const [schemaPath, ...dataPaths] = process.argv.slice(2);
+if (!schemaPath || dataPaths.length === 0) {
+  process.stderr.write("usage: schema-check schema.json data...\n");
+  process.exit(2);
+}
+const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false });
+addFormats(ajv);
+let validate;
+try {
+  validate = ajv.compile(JSON.parse(readInput(schemaPath).text));
+} catch (err) {
+  process.stderr.write(`${schemaPath}: schema error: ${err.message}\n`);
+  process.exit(2);
+}
+let status = 0;
+for (const path of dataPaths) {
+  const { name, text } = readInput(path);
+  let data;
+  try {
+    if (/\.ya?ml$/.test(name)) {
+      const doc = YAML.parseDocument(text);
+      if (doc.errors.length) throw new Error(formatYamlError(name, doc.errors[0]));
+      data = doc.toJS();
+    } else data = JSON.parse(text);
+  } catch (err) {
+    process.stdout.write(`${name}: parse error: ${err.message}\n`);
+    status = 1;
+    continue;
+  }
+  if (validate(data)) {
+    process.stdout.write(`${name}: valid\n`);
+    continue;
+  }
+  status = 1;
+  for (const e of validate.errors) {
+    const at = e.instancePath || "(root)";
+    const extra = e.keyword === "additionalProperties" ? ` '${e.params.additionalProperty}'`
+      : e.keyword === "enum" ? ` ${JSON.stringify(e.params.allowedValues)}` : "";
+    process.stdout.write(`${name}: ${at} ${e.message}${extra}\n`);
+  }
+}
+process.exit(status);

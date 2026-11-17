@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+// yamlcheck [--yaml-1.1] file...
+// Reports parse errors and warnings with line:column. Exit 0 if every file
+// parsed without errors, 1 otherwise. Warnings do not change the status.
+import YAML from "yaml";
+import { readInput, parseArgs, formatYamlError } from "./_common.mjs";
+
+const { opts, rest } = parseArgs(process.argv.slice(2), { "--yaml-1.1": "flag" });
+const files = rest.length ? rest : ["-"];
+let status = 0;
+for (const file of files) {
+  const { name, text } = readInput(file);
+  const docs = YAML.parseAllDocuments(text, { version: opts["--yaml-1.1"] ? "1.1" : "1.2", prettyErrors: true });
+  const list = Array.isArray(docs) ? docs : [docs];
+  let errors = 0;
+  for (const doc of list) {
+    for (const w of doc.warnings) process.stdout.write(`${formatYamlError(name, w)} (warning)\n`);
+    for (const e of doc.errors) {
+      process.stdout.write(formatYamlError(name, e) + "\n");
+      errors++;
+    }
+  }
+  if (errors) status = 1;
+  else process.stdout.write(`${name}: ok, ${list.length} document${list.length === 1 ? "" : "s"}\n`);
+}
+process.exit(status);

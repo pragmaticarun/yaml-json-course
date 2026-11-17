@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+// yaml2json [--yaml-1.1] [--all] [--max-alias-count N] [file|-]
+// Parses YAML with the `yaml` npm package and prints JSON (2-space indent).
+// --all prints every document in the stream as one JSON array.
+import YAML from "yaml";
+import { readInput, parseArgs, formatYamlError } from "./_common.mjs";
+
+const { opts, rest } = parseArgs(process.argv.slice(2), {
+  "--yaml-1.1": "flag",
+  "--all": "flag",
+  "--max-alias-count": "value",
+});
+const { name, text } = readInput(rest[0]);
+const options = { version: opts["--yaml-1.1"] ? "1.1" : "1.2" };
+if (opts["--yaml-1.1"]) options.merge = true;
+const toJSOptions = {};
+if (opts["--max-alias-count"]) toJSOptions.maxAliasCount = Number(opts["--max-alias-count"]);
+
+const docs = YAML.parseAllDocuments(text, options);
+const list = Array.isArray(docs) ? docs : [docs];
+let failed = false;
+for (const doc of list) {
+  for (const err of doc.errors) {
+    process.stderr.write(formatYamlError(name, err) + "\n");
+    failed = true;
+  }
+}
+if (failed) process.exit(1);
+if (!opts["--all"] && list.length > 1) {
+  process.stderr.write(`${name}: stream has ${list.length} documents; pass --all\n`);
+  process.exit(1);
+}
+try {
+  const values = list.map((doc) => doc.toJS(toJSOptions));
+  const out = opts["--all"] ? values : values[0] ?? null;
+  process.stdout.write(JSON.stringify(out, null, 2) + "\n");
+} catch (err) {
+  process.stderr.write(`${name}: ${err.message}\n`);
+  process.exit(1);
+}
