@@ -1,0 +1,15 @@
+#!/usr/bin/env node
+// json2yaml [file|-]
+// Strict JSON.parse, then YAML.stringify from the `yaml` npm package.
+import YAML from "yaml";
+import { readInput } from "./_common.mjs";
+
+const { name, text } = readInput(process.argv[2]);
+let value;
+try {
+  value = JSON.parse(text);
+} catch (err) {
+  process.stderr.write(`${name}: ${err.message}\n`);
+  process.exit(1);
+}
+process.stdout.write(YAML.stringify(value));
